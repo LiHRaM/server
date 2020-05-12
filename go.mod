@@ -15,4 +15,5 @@ require (
 	github.com/matrix-org/gomatrixserverlib v0.0.0-20200511154227-5cc71d36632b
 	github.com/prometheus/client_golang v1.4.1
 	github.com/sirupsen/logrus v1.4.2
+	golang.org/x/mobile v0.0.0-20200329125638-4c31acba0007 // indirect
 )
