@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"os"
 
 	"github.com/lihram/server/v2"
 	"github.com/sirupsen/logrus"
@@ -26,15 +27,22 @@ import (
 func main() {
 	instanceName := flag.String("name", "dendrite-p2p", "the name of this P2P demo instance")
 	instancePort := flag.Int("port", 0, "the port that the client API will listen on")
+	instancePath := flag.String("path", "./build", "the path where databases will be stored")
 	flag.Parse()
 
-	callback := simpleCallback{}
+	// Create the build directory if it does not exist
+	if _, err := os.Stat(*instancePath); os.IsNotExist(err) {
+		err := os.MkdirAll(*instancePath, 0755)
+		if err != nil {
+			panic(nil)
+		}
+	}
 
 	server.Init(
-		"./build/",
+		*instancePath,
 		*instanceName,
 		*instancePort,
-		callback,
+		simpleCallback{},
 	)
 }
 
