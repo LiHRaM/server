@@ -37,8 +37,8 @@ import (
 	"github.com/matrix-org/dendrite/common/config"
 )
 
-// P2PDendrite is a Peer-to-Peer variant of BaseDendrite.
-type P2PDendrite struct {
+// p2pDendrite is a Peer-to-Peer variant of BaseDendrite.
+type p2pDendrite struct {
 	Base basecomponent.BaseDendrite
 
 	// Store our libp2p object so that we can make outgoing connections from it
@@ -50,10 +50,10 @@ type P2PDendrite struct {
 	LibP2PPubsub  *pubsub.PubSub
 }
 
-// NewP2PDendrite creates a new instance to be used by a component.
+// newP2PDendrite creates a new instance to be used by a component.
 // The componentName is used for logging purposes, and should be a friendly name
 // of the component running, e.g. SyncAPI.
-func NewP2PDendrite(cfg *config.Dendrite, componentName string) *P2PDendrite {
+func newP2PDendrite(cfg *config.Dendrite, componentName string) *p2pDendrite {
 	baseDendrite := basecomponent.NewBaseDendrite(cfg, componentName)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,7 +99,7 @@ func NewP2PDendrite(cfg *config.Dendrite, componentName string) *P2PDendrite {
 
 	cfg.Matrix.ServerName = gomatrixserverlib.ServerName(libp2p.ID().String())
 
-	return &P2PDendrite{
+	return &p2pDendrite{
 		Base:          *baseDendrite,
 		LibP2P:        libp2p,
 		LibP2PContext: ctx,

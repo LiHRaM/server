@@ -51,25 +51,25 @@ import (
 )
 
 func createKeyDB(
-	base *P2PDendrite,
+	p2p *p2pDendrite,
 ) keydb.Database {
 	db, err := keydb.NewDatabase(
-		string(base.Base.Cfg.Database.ServerKey),
-		base.Base.Cfg.DbProperties(),
-		base.Base.Cfg.Matrix.ServerName,
-		base.Base.Cfg.Matrix.PrivateKey.Public().(ed25519.PublicKey),
-		base.Base.Cfg.Matrix.KeyID,
+		string(p2p.Base.Cfg.Database.ServerKey),
+		p2p.Base.Cfg.DbProperties(),
+		p2p.Base.Cfg.Matrix.ServerName,
+		p2p.Base.Cfg.Matrix.PrivateKey.Public().(ed25519.PublicKey),
+		p2p.Base.Cfg.Matrix.KeyID,
 	)
 	if err != nil {
 		logrus.WithError(err).Panicf("failed to connect to keys db")
 	}
 	mdns := mDNSListener{
-		host:  base.LibP2P,
+		host:  p2p.LibP2P,
 		keydb: db,
 	}
 	serv, err := p2pdisc.NewMdnsService(
-		base.LibP2PContext,
-		base.LibP2P,
+		p2p.LibP2PContext,
+		p2p.LibP2P,
 		time.Second*10,
 		"_matrix-dendrite-p2p._tcp",
 	)
@@ -81,17 +81,17 @@ func createKeyDB(
 }
 
 func createFederationClient(
-	base *P2PDendrite,
+	p2p *p2pDendrite,
 ) *gomatrixserverlib.FederationClient {
 	fmt.Println("Running in libp2p federation mode")
 	fmt.Println("Warning: Federation with non-libp2p homeservers will not work in this mode yet!")
 	tr := &http.Transport{}
 	tr.RegisterProtocol(
 		"matrix",
-		p2phttp.NewTransport(base.LibP2P, p2phttp.ProtocolOption("/matrix")),
+		p2phttp.NewTransport(p2p.LibP2P, p2phttp.ProtocolOption("/matrix")),
 	)
 	return gomatrixserverlib.NewFederationClientWithTransport(
-		base.Base.Cfg.Matrix.ServerName, base.Base.Cfg.Matrix.KeyID, base.Base.Cfg.Matrix.PrivateKey, tr,
+		p2p.Base.Cfg.Matrix.ServerName, p2p.Base.Cfg.Matrix.KeyID, p2p.Base.Cfg.Matrix.PrivateKey, tr,
 	)
 }
 
@@ -141,45 +141,45 @@ func Init(path string, instanceName string, instancePort int, callback Callback)
 		panic(err)
 	}
 
-	base := NewP2PDendrite(&cfg, "Monolith")
-	defer base.Base.Close() // nolint: errcheck
+	p2p := newP2PDendrite(&cfg, "Monolith")
+	defer p2p.Base.Close() // nolint: errcheck
 
-	accountDB := base.Base.CreateAccountsDB()
-	deviceDB := base.Base.CreateDeviceDB()
-	keyDB := createKeyDB(base)
-	federation := createFederationClient(base)
+	accountDB := p2p.Base.CreateAccountsDB()
+	deviceDB := p2p.Base.CreateDeviceDB()
+	keyDB := createKeyDB(p2p)
+	federation := createFederationClient(p2p)
 	keyRing := keydb.CreateKeyRing(federation.Client, keyDB, cfg.Matrix.KeyPerspectives)
 
 	rsAPI := roomserver.SetupRoomServerComponent(
-		&base.Base, keyRing, federation,
+		&p2p.Base, keyRing, federation,
 	)
 	eduInputAPI := eduserver.SetupEDUServerComponent(
-		&base.Base, cache.New(),
+		&p2p.Base, cache.New(),
 	)
 	asAPI := appservice.SetupAppServiceAPIComponent(
-		&base.Base, accountDB, deviceDB, federation, rsAPI, transactions.New(),
+		&p2p.Base, accountDB, deviceDB, federation, rsAPI, transactions.New(),
 	)
 	fsAPI := federationsender.SetupFederationSenderComponent(
-		&base.Base, federation, rsAPI, &keyRing,
+		&p2p.Base, federation, rsAPI, &keyRing,
 	)
 	rsAPI.SetFederationSenderAPI(fsAPI)
 
 	clientapi.SetupClientAPIComponent(
-		&base.Base, deviceDB, accountDB,
+		&p2p.Base, deviceDB, accountDB,
 		federation, &keyRing, rsAPI,
 		eduInputAPI, asAPI, transactions.New(), fsAPI,
 	)
 	eduProducer := producers.NewEDUServerProducer(eduInputAPI)
-	federationapi.SetupFederationAPIComponent(&base.Base, accountDB, deviceDB, federation, &keyRing, rsAPI, asAPI, fsAPI, eduProducer)
-	mediaapi.SetupMediaAPIComponent(&base.Base, deviceDB)
-	publicRoomsDB, err := storage.NewPublicRoomsServerDatabaseWithPubSub(string(base.Base.Cfg.Database.PublicRoomsAPI), base.LibP2PPubsub)
+	federationapi.SetupFederationAPIComponent(&p2p.Base, accountDB, deviceDB, federation, &keyRing, rsAPI, asAPI, fsAPI, eduProducer)
+	mediaapi.SetupMediaAPIComponent(&p2p.Base, deviceDB)
+	publicRoomsDB, err := storage.NewPublicRoomsServerDatabaseWithPubSub(string(p2p.Base.Cfg.Database.PublicRoomsAPI), p2p.LibP2PPubsub)
 	if err != nil {
 		logrus.WithError(err).Panicf("failed to connect to public rooms db")
 	}
-	publicroomsapi.SetupPublicRoomsAPIComponent(&base.Base, deviceDB, publicRoomsDB, rsAPI, federation, nil) // Check this later
-	syncapi.SetupSyncAPIComponent(&base.Base, deviceDB, accountDB, rsAPI, federation, &cfg)
+	publicroomsapi.SetupPublicRoomsAPIComponent(&p2p.Base, deviceDB, publicRoomsDB, rsAPI, federation, nil) // Check this later
+	syncapi.SetupSyncAPIComponent(&p2p.Base, deviceDB, accountDB, rsAPI, federation, &cfg)
 
-	httpHandler := common.WrapHandlerInCORS(base.Base.APIMux)
+	httpHandler := common.WrapHandlerInCORS(p2p.Base.APIMux)
 
 	// Set up the API endpoints we handle. /metrics is for prometheus, and is
 	// not wrapped by CORS, while everything else is
@@ -198,10 +198,10 @@ func Init(path string, instanceName string, instancePort int, callback Callback)
 		logrus.Fatal(http.Serve(listener, nil))
 	}()
 	// Expose the matrix APIs also via libp2p
-	if base.LibP2P != nil {
+	if p2p.LibP2P != nil {
 		go func() {
-			logrus.Info("Listening on libp2p host ID ", base.LibP2P.ID())
-			listener, err := gostream.Listen(base.LibP2P, "/matrix")
+			logrus.Info("Listening on libp2p host ID ", p2p.LibP2P.ID())
+			listener, err := gostream.Listen(p2p.LibP2P, "/matrix")
 			if err != nil {
 				panic(err)
 			}
