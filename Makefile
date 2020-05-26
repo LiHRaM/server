@@ -10,3 +10,7 @@ flags = -o server.aar -v .
 .PHONY: arm
 arm:
 	$(gc) -target=android/arm,android/arm64 $(flags)
+
+.PHONY: arm64
+arm64:
+	$(gc) -target=android/arm64 $(flags)
